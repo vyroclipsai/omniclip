@@ -1,5 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#08090A",
+};
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://integration-kim-bedrooms-stake.trycloudflare.com";
 
