@@ -14,6 +14,24 @@ DIMENSIONS = {
     ("16:9", "720p"):  (1280, 720),
 }
 
+_NVENC_AVAILABLE = None
+
+def is_nvenc_available() -> bool:
+    global _NVENC_AVAILABLE
+    if _NVENC_AVAILABLE is not None:
+        return _NVENC_AVAILABLE
+    try:
+        check = subprocess.run(
+            ["ffmpeg", "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3
+        )
+        _NVENC_AVAILABLE = (check.returncode == 0)
+    except Exception:
+        _NVENC_AVAILABLE = False
+    return _NVENC_AVAILABLE
+
 def get_source_fps(source_video: str) -> float:
     """Probes the exact native frame rate of the source video without hardcoding."""
     try:
@@ -163,12 +181,16 @@ def render_clip(
     else:
         cmd.extend(["-vf", vf_simple])
 
+    # Use hardware NVENC encoder if available on GPU for 3x-5x faster rendering
+    use_nvenc = is_nvenc_available()
+    vcodec_args = (
+        ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23", "-pix_fmt", "yuv420p"]
+        if use_nvenc
+        else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p"]
+    )
+
     # Preserve native source frame rate by not hardcoding -r and passing passthrough
-    cmd.extend([
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "22",
-        "-pix_fmt", "yuv420p",
+    cmd.extend(vcodec_args + [
         "-fps_mode", "passthrough",
         "-c:a", "aac",
         "-b:a", "192k",
@@ -177,6 +199,31 @@ def render_clip(
     ])
 
     proc = subprocess.run(cmd, cwd=out_dir, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if proc.returncode != 0 and use_nvenc:
+        # Fallback to libx264 if NVENC fails
+        cmd_fallback = [
+            "ffmpeg", "-y",
+            "-ss", str(round(start_time, 3)),
+            "-i", os.path.abspath(source_video),
+            "-t", str(round(duration, 3)),
+        ]
+        if filter_complex:
+            cmd_fallback.extend(["-filter_complex", filter_complex, "-map", "[v]", "-map", "0:a?"])
+        else:
+            cmd_fallback.extend(["-vf", vf_simple])
+        cmd_fallback.extend([
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "22",
+            "-pix_fmt", "yuv420p",
+            "-fps_mode", "passthrough",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            out_name
+        ])
+        proc = subprocess.run(cmd_fallback, cwd=out_dir, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", errors="replace")
         raise RuntimeError(f"FFmpeg render failed (exit code {proc.returncode}): {err[-400:]}")

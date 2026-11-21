@@ -92,6 +92,17 @@ def fetch_youtube_captions(url: str, output_dir: str) -> dict | None:
     except Exception:
         return None
 
+# PyAV 19.0.2 compatibility monkey-patch: remove deprecated 'metadata_errors'
+try:
+    import av
+    _orig_av_open = av.open
+    def _patched_av_open(*args, **kwargs):
+        kwargs.pop("metadata_errors", None)
+        return _orig_av_open(*args, **kwargs)
+    av.open = _patched_av_open
+except Exception:
+    pass
+
 try:
     from faster_whisper import WhisperModel
     HAS_FASTER_WHISPER = True
@@ -147,7 +158,7 @@ def transcribe_video(video_path: str, model_size: str = "base", language: str = 
                 num_threads = min(12, os.cpu_count() or 4)
                 fw_model = WhisperModel(selected_model, device="cpu", compute_type="int8", cpu_threads=num_threads)
                 lang_arg = language if language and language != "auto" else None
-                segments_gen, info = fw_model.transcribe(temp_wav, word_timestamps=True, language=lang_arg)
+                segments_gen, info = fw_model.transcribe(temp_wav, word_timestamps=True, language=lang_arg, beam_size=1)
 
                 words = []
                 segments = []
