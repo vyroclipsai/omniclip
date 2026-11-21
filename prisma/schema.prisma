@@ -1,0 +1,90 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String?
+  avatarUrl String?
+  role      String    @default("user")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id              String       @id @default(uuid())
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  sourceType      String       @default("url") // url, upload, sample
+  sourceUrl       String?
+  sourcePath      String?
+  status          String       @default("queued") // queued, processing, completed, failed
+  progress        Int          @default(0)
+  currentStep     String?
+  durationSeconds Float?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  clips           Clip[]
+  jobs            Job[]
+  transcripts     Transcript[]
+}
+
+model Transcript {
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  language     String   @default("en")
+  fullText     String
+  segmentsJson String   // JSON serialized
+  totalWords   Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model Clip {
+  id                String   @id @default(uuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title             String
+  viralityScore     Int
+  hookRating        String?
+  explanation       String?
+  startTime         Float
+  endTime           Float
+  duration          Float
+  aspectRatio       String   @default("9:16")
+  renderMode        String   @default("crop")
+  transcriptText    String?
+  wordsJson         String?  // JSON serialized word tokens
+  cropInfoJson      String?  // JSON serialized crop coordinates
+  captionStyleJson  String?  // JSON serialized caption style
+  assSubtitlePath   String?
+  renderedVideoPath String?
+  videoUrl          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Job {
+  id           String    @id @default(uuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source       String
+  status       String    @default("queued") // queued, downloading, transcribing, analyzing, rendering, completed, failed
+  progress     Int       @default(0)
+  currentStep  String?
+  errorMessage String?
+  errorDetails String?
+  logsJson     String?   // JSON serialized logs
+  maxClips     Int       @default(5)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+}
