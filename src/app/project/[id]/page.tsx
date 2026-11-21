@@ -142,7 +142,10 @@ export default function ProjectDetailsPage({ params }: PageProps) {
         }
       }
     } else {
-      console.error("Failed to fetch project:", error);
+      const errDetail = error?.error || (data as any)?.error;
+      if (errDetail) {
+        console.warn("Project fetch notice:", errDetail);
+      }
     }
     setLoading(false);
   };

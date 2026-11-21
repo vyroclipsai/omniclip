@@ -46,7 +46,10 @@ export default function ProjectsDashboardPage() {
     if (data?.success && data.projects) {
       setProjects(data.projects);
     } else {
-      console.error("Failed to load projects:", error);
+      const errDetail = error?.error || (data as any)?.error;
+      if (errDetail) {
+        console.warn("Projects fetch notice:", errDetail);
+      }
     }
     setLoading(false);
   };
